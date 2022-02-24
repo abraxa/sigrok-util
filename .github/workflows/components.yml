@@ -1,0 +1,306 @@
+name: Build sigrok components
+
+on:
+  push:
+  pull_request:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+  schedule:
+    - cron: '10 4 * * *'
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # REPO_OWNER: "sigrokproject"
+  # REPO_OWNER_SV: "knarfS"
+  REPO_OWNER: "${{ github.actor }}"
+  REPO_OWNER_SV: "${{ github.actor }}"
+  COMPONENTS: "libserialport libsigrok libsigrokdecode sigrok-dumps sigrok-test sigrok-cli pulseview smuview sigrok-firmware-fx2lafw"
+  SOURCE_BASE: "${{ github.workspace }}/source"
+  BUILD_BASE: "${{ github.workspace }}/build"
+  INSTALL_PREFIX: "${{ github.workspace }}/usr"
+  PKG_CONFIG_PATH: "${{ github.workspace }}/usr/lib/pkgconfig"
+  BUILD_TYPE: "RelWithDebInfo"
+
+jobs:
+  build_components:
+
+    strategy:
+      matrix:
+        # os: [ ubuntu-18.04, ubuntu-20.04, macos-10.15, macos-11, windows-2019, ]
+        os: [ ubuntu-20.04, macos-10.15, windows-2019, ]
+        # python-version: [ "3.8", "3.10", ]
+      fail-fast: false
+
+    name: Build sigrok components
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+    - name: Install dependencies (Ubuntu)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git-core gcc make autoconf automake libtool \
+          g++ autoconf-archive pkg-config doxygen swig \
+          check cmake python3-dev python-setuptools \
+          ninja-build sdcc \
+          asciidoc asciidoctor ruby-asciidoctor-pdf coderay \
+          libglib2.0-dev libglibmm-2.4-dev libzip-dev \
+          libboost-dev libqt5svg5-dev qtbase5-dev libqwt-qt5-dev \
+          python3-dev python-gi-dev python-setuptools \
+          libtirpc-dev libusb-dev libhidapi-dev libhidapi-hidraw0 \
+          libbluetooth-dev libftdi1-dev libieee1284-3-dev \
+          libpython3-dev python3-dev python3-numpy python3-numpy-dev \
+          qttools5-dev-tools libqwt-qt5-dev libvisa-dev nettle-dev \
+          libboost-system-dev libboost-filesystem-dev \
+          libboost-serialization-dev libboost-test-dev \
+          libboost-stacktrace-dev
+          # TODO Qt5LinguistTools
+        sudo apt-cache search linguist
+
+    - name: Install dependencies (Mac)
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        brew install \
+          autoconf automake autoconf-archive pkg-config \
+          libtool check doxygen swig cmake python3 ninja \
+          sdcc \
+          libzip libusb libftdi hidapi nettle \
+          glib glibmm@2.66 boost qt@5 qwt
+        brew install python3-dev || true
+        brew install sdar || true
+        # TODO Add more libsigrok dependencies beyond smuview essentials.
+        # Need to "prefer Qt5" in subsequent commands, avoid Qt6 dep.
+        echo "PATH=\"/usr/local/opt/qt@5/bin:$PATH\"" >> $GITHUB_ENV
+        echo "LDFLAGS=\"-L/usr/local/opt/qt@5/lib\"" >> $GITHUB_ENV
+        echo "CPPFLAGS=\"-I/usr/local/opt/qt@5/include\"" >> $GITHUB_ENV
+        echo "PKG_CONFIG_PATH=\"/usr/local/opt/qt@5/lib/pkgconfig:$PKG_CONFIG_PATH\"" >> $GITHUB_ENV
+
+    - name: Setup MinGW (Windows)
+      if: startsWith(matrix.os, 'windows')
+      id: mingw-setup
+      uses: egor-tensin/setup-mingw@v2
+      with:
+        platform: x64
+        cc: 1
+
+    - name: Export CC (Windows)
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        echo "CROSS_COMPILE=${{ steps.mingw-setup.outputs.prefix }}-" >> $GITHUB_ENV
+        echo "CC=${{ steps.mingw-setup.outputs.gcc }}" >> $GITHUB_ENV
+        echo "CXX=${{ steps.mingw-setup.outputs.gxx }}" >> $GITHUB_ENV
+
+    - name: Install dependencies (Windows)
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        choco install python3 -y
+        # TODO Install more external dependencies.
+
+    - name: Setup Python # version ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      # with:
+      #   python-version: ${{ matrix.python-version }}
+
+
+    - name: Checkout repo (for actions)
+      uses: actions/checkout@v2
+      with:
+        path: action-checkout
+
+    - name: Build autotools libserialport
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/libserialport
+        source-path: ${{ env.SOURCE_BASE }}/libserialport
+        build-path: ${{ env.BUILD_BASE }}/libserialport
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        check-target: check || true
+        install-target: install-strip
+
+    - name: Build autotools libsigrok
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/libsigrok
+        source-path: ${{ env.SOURCE_BASE }}/libsigrok
+        build-path: ${{ env.BUILD_BASE }}/libsigrok
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        check-target: check
+        install-target: install-strip
+
+    - name: Build autotools libsigrokdecode
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/libsigrokdecode
+        source-path: ${{ env.SOURCE_BASE }}/libsigrokdecode
+        build-path: ${{ env.BUILD_BASE }}/libsigrokdecode
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        check-target: check
+        install-target: install-strip
+
+    - name: Build autotools sigrok-dumps
+      if: false
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-dumps
+        source-path: ${{ env.SOURCE_BASE }}/sigrok-dumps
+        build-path: ${{ env.BUILD_BASE }}/sigrok-dumps
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        install-target: install-strip
+
+    - name: Build autotools sigrok-test
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-test
+        source-path: ${{ env.SOURCE_BASE }}/sigrok-test
+        build-path: ${{ env.BUILD_BASE }}/sigrok-test
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        install-target: install-strip
+
+    - name: Build autotools sigrok-cli
+      uses: ./action-checkout/.github/actions/build-autotools
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-cli
+        source-path: ${{ env.SOURCE_BASE }}/sigrok-cli
+        build-path: ${{ env.BUILD_BASE }}/sigrok-cli
+        config-args: "--prefix=${{ env.INSTALL_PREFIX }}"
+        check-target: check
+        install-target: install-strip
+
+    - name: Build cmake pulseview
+      if: false
+      uses: ./action-checkout/.github/actions/build-cmake
+      with:
+        repository: ${{ env.REPO_OWNER }}/pulseview
+        source-path: ${{ env.SOURCE_BASE }}/pulseview
+        build-path: ${{ env.BUILD_BASE }}/pulseview
+        config-args: "-GNinja -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+        check-target: ctest
+        install-target: install/strip
+
+    - name: Build cmake smuview
+      uses: ./action-checkout/.github/actions/build-cmake
+      with:
+        repository: ${{ env.REPO_OWNER_SV }}/smuview
+        source-path: ${{ env.SOURCE_BASE }}/smuview
+        build-path: ${{ env.BUILD_BASE }}/smuview
+        config-args: "-GNinja -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+        check-target: none
+        install-target: install/strip
+
+
+    - name: Dump contexts for diagnostics
+      if: false
+      run: |
+        echo github '${{ toJSON(github) }}'
+        echo job '${{ toJSON(job) }}'
+        echo steps '${{ toJSON(steps) }}'
+        echo runner '${{ toJSON(runner) }}'
+        echo strategy '${{ toJSON(strategy) }}'
+        echo matrix '${{ toJSON(matrix) }}'
+
+
+    - name: Setup directory hierarchy
+      # BEWARE! The github 'checkout' action will _remove_ the source
+      # code before getting another copy. Remain aware of this for
+      # out of source builds where the output is a subdirectory of
+      # the sources, not a sibling.
+      run: |
+        mkdir -p $SOURCE_BASE $BUILD_BASE $INSTALL_PREFIX
+        for C in $COMPONENTS; do mkdir -p $BUILD_BASE/$C; done
+
+
+    - name: Checkout sigrok-dumps
+      if: false
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-dumps
+        path: ${{ env.SOURCE_BASE }}/sigrok-dumps
+
+    - name: Checkout sigrok-firmware-fx2lafw
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-firmware-fx2lafw
+        path: ${{ env.SOURCE_BASE }}/sigrok-firmware-fx2lafw
+
+
+    - name: Prepare configure sigrok-dumps
+      if: false
+      working-directory: ${{ env.SOURCE_BASE }}/sigrok-dumps
+      run: |
+        if [ -x ./autogen.sh ]; then ./autogen.sh; fi
+
+    - name: Prepare configure sigrok-firmware-fx2lafw
+      working-directory: ${{ env.SOURCE_BASE }}/sigrok-firmware-fx2lafw
+      run: |
+        ./autogen.sh
+
+
+    - name: Make distcheck libsigrok
+      if: false
+      working-directory: ${{ env.BUILD_BASE }}/libsigrok
+      run: |
+        make distcheck || true
+
+    - name: Install sigrok-dumps
+      if: false
+      working-directory: ${{ env.BUILD_BASE }}/sigrok-dumps
+      run: |
+        # TODO Currently does not support out-of-source builds (and thus
+        # installs). Put the chdir here for improved awareness during
+        # maintenance.
+        cd ${{ env.SOURCE_BASE }}/sigrok-dumps
+        make DESTDIR=$INSTALL_PREFIX/share/sigrok-dumps install
+
+    # TODO Also build and install sigrok-firmware-fx2lafw.
+
+
+    - name: Upload artifacts
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        # name: output-${{ matrix.os }}-py${{ matrix.python-version }}
+        name: output-${{ matrix.os }}
+        path: |
+          ${{ env.INSTALL_PREFIX }}
+          !${{ env.INSTALL_PREFIX }}/share/sigrok-dumps
+          !${{ env.INSTALL_PREFIX }}/share/sigrok-test
+          !**/__pycache__
+        retention-days: 7
+
+  execute_tests:
+    needs: [ build_components, ]
+
+    name: Execute decoder tests
+    runs-on: ubuntu-20.04
+
+    steps:
+
+    - name: Checkout sigrok-test
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-test
+        path: ${{ env.SOURCE_BASE }}/sigrok-test
+
+    - name: Checkout sigrok-dumps
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.REPO_OWNER }}/sigrok-dumps
+        path: ${{ env.SOURCE_BASE }}/sigrok-dumps
+
+    - name: Download artifacts
+      if: always()
+      uses: actions/download-artifact@v2
+      with:
+        # name: output-${{ matrix.os }}-py${{ matrix.python-version }}
+        name: output-ubuntu-20.04
+        path: usr
+
+    # TODO Use the previously built and installed pdtest binary and the
+    # previously built and installed set of decoders, to check their
+    # operation by using the sigrok-test set of config files and the
+    # sigrok-dumps set of capture files.
