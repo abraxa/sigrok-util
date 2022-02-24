@@ -1,0 +1,115 @@
+# GitHub Action to compile a cmake based source project.
+
+name: Build cmake project
+description: Build a source project that uses cmake
+author: gsi
+
+inputs:
+
+  repository:
+    description: 'git repository, defaults to current repo'
+    required: false
+    default: ''
+
+  repo-ref:
+    description: 'repository ref (branch, tag)'
+    required: false
+    default: ''
+
+  source-path:
+    description: 'source directory, defaults to current dir'
+    required: false
+    default: '.'
+
+  build-path:
+    description: 'build directory, defaults to source dir'
+    required: false
+    default: ''
+
+  config-args:
+    description: 'additional arguments to configure call'
+    required: false
+    default: ''
+
+  check-target:
+    description: 'make target to check binaries, empty by default, can be ctest'
+    required: false
+    default: 'none'
+
+  install-target:
+    description: 'make target to install binaries, install by default'
+    required: false
+    default: 'install'
+
+  steps-sequence:
+    description: 'list of steps to execute, all steps by default'
+    required: false
+    default: ' checkout configure compile check install '
+    # Avoid the "A sequence was not expected" error message.
+
+runs:
+  using: 'composite'
+  steps:
+
+  - name: Test diagnostics
+    # HACK Used during development and maintenance of the action.
+    if: false
+    shell: bash
+    run: |
+      echo "===== --------------------"
+      echo "make check condition checks"
+      echo "seq-contains " ${{ contains(inputs.steps-sequence, ' check ') }}
+      echo "non-empty? " ${{ inputs.check-target != '' }}
+      echo "not-none? " ${{ inputs.check-target != 'none' }}
+      echo "combo " ${{ contains(inputs.steps-sequence, ' check ') && inputs.check-target != '' && inputs.check-target != 'none' }}
+      echo "command " ${{ inputs.build-tool }} ${{ inputs.check-target }}
+      echo "===== --------------------"
+
+  - name: Checkout sources
+    if: contains(inputs.steps-sequence, ' checkout ')
+    uses: actions/checkout@v2
+    with:
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.repo-ref }}
+      path: ${{ inputs.source-path }}
+
+  - name: Configure sources
+    if: contains(inputs.steps-sequence, ' configure ')
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.source-path }}" ]; then cd "${{ inputs.source-path }}"; fi
+      if [ -n "${{ inputs.build-path }}" ]; then mkdir -p "${{ inputs.build-path }}"; fi
+      BD=.; if [ -n "${{ inputs.build-path }}" ]; then BD=$( pwd ); cd "${{ inputs.build-path }}"; fi
+      cmake ${{ inputs.config-args }} $BD
+
+  - name: Compile sources
+    if: contains(inputs.steps-sequence, ' compile ')
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.source-path }}" ]; then cd "${{ inputs.source-path }}"; fi
+      if [ -n "${{ inputs.build-path }}" ]; then cd "${{ inputs.build-path }}"; fi
+      cmake --build . --config ${{ env.BUILD_TYPE }}
+
+  - name: Test binaries (ctest)
+    if: contains(inputs.steps-sequence, ' check ') && inputs.check-target == 'ctest'
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.source-path }}" ]; then cd "${{ inputs.source-path }}"; fi
+      if [ -n "${{ inputs.build-path }}" ]; then cd "${{ inputs.build-path }}"; fi
+      ctest -C ${{ env.BUILD_TYPE }}
+
+  - name: Test binaries (target)
+    if: contains(inputs.steps-sequence, ' check ') && inputs.check-target != 'none' && inputs.check-target != 'ctest'
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.source-path }}" ]; then cd "${{ inputs.source-path }}"; fi
+      if [ -n "${{ inputs.build-path }}" ]; then cd "${{ inputs.build-path }}"; fi
+      cmake --build . --config ${{ env.BUILD_TYPE }} --target ${{ inputs.check-target }}
+
+  - name: Install binaries
+    if: contains(inputs.steps-sequence, ' install ')
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.source-path }}" ]; then cd "${{ inputs.source-path }}"; fi
+      if [ -n "${{ inputs.build-path }}" ]; then cd "${{ inputs.build-path }}"; fi
+      cmake --build . --config ${{ env.BUILD_TYPE }} --target ${{ inputs.install-target }}
