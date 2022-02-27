@@ -153,6 +153,7 @@ jobs:
         install-target: install-strip
 
     - name: Build autotools sigrok-test
+      if: false
       uses: ./action-checkout/.github/actions/build-autotools
       with:
         repository: ${{ env.REPO_OWNER }}/sigrok-test
@@ -162,6 +163,7 @@ jobs:
         install-target: install-strip
 
     - name: Build autotools sigrok-cli
+      if: false
       uses: ./action-checkout/.github/actions/build-autotools
       with:
         repository: ${{ env.REPO_OWNER }}/sigrok-cli
@@ -172,7 +174,6 @@ jobs:
         install-target: install-strip
 
     - name: Build cmake pulseview
-      if: false
       uses: ./action-checkout/.github/actions/build-cmake
       with:
         repository: ${{ env.REPO_OWNER }}/pulseview
@@ -183,6 +184,7 @@ jobs:
         install-target: install/strip
 
     - name: Build cmake smuview
+      if: false
       uses: ./action-checkout/.github/actions/build-cmake
       with:
         repository: ${{ env.REPO_OWNER_SV }}/smuview
