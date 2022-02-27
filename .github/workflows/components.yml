@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         # os: [ ubuntu-18.04, ubuntu-20.04, macos-10.15, macos-11, windows-2019, ]
-        os: [ ubuntu-20.04, macos-10.15, windows-2019, ]
+        os: [ ubuntu-20.04 ]
         # python-version: [ "3.8", "3.10", ]
       fail-fast: false
 
@@ -113,6 +113,7 @@ jobs:
         path: action-checkout
 
     - name: Build autotools libserialport
+      if: false
       uses: ./action-checkout/.github/actions/build-autotools
       with:
         repository: ${{ env.REPO_OWNER }}/libserialport
