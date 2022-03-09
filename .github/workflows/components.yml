@@ -225,6 +225,7 @@ jobs:
         path: ${{ env.SOURCE_BASE }}/sigrok-dumps
 
     - name: Checkout sigrok-firmware-fx2lafw
+      if: false
       uses: actions/checkout@v2
       with:
         repository: ${{ env.REPO_OWNER }}/sigrok-firmware-fx2lafw
@@ -238,6 +239,7 @@ jobs:
         if [ -x ./autogen.sh ]; then ./autogen.sh; fi
 
     - name: Prepare configure sigrok-firmware-fx2lafw
+      if: false
       working-directory: ${{ env.SOURCE_BASE }}/sigrok-firmware-fx2lafw
       run: |
         ./autogen.sh
